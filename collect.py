@@ -105,6 +105,9 @@ try:
     while True:
         pc_set, pc_created, pc_deleted = collect_process(pc_set)
         nt_set, nt_opened, nt_closed = collect_network(nt_set)
+        fout.write(str(
+            (pc_created, pc_deleted, nt_opened, nt_closed, handler.created, handler.deleted, handler.moved)
+            ) + '\n')
         if args.verbose:
             print("----------------------------------------")
             print(asctime(localtime()))
