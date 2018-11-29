@@ -3,16 +3,23 @@
 # Created by CMouse (qt2126@columbia.edu)
 
 import argparse
+import logging
 import os
-from time import localtime, sleep
+from time import asctime, localtime, sleep
 
 import psutil
-import watchdog
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger()
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--interval', default=5, type=int, 
         help='The interval (minutes) between two consecutive collections.')
+    parser.add_argument('-m', '--monitor_dir', default=os.path.expanduser('~/Documents'), type=str,
+        help='The directory to monitor for file system events.')
     parser.add_argument('-o', '--output_dir', default='data', type=str,
         help='The path to output directory.')
     parser.add_argument('-v', '--verbose', action='store_true',
@@ -46,19 +53,51 @@ def collect_network(prev_set):
     closed = len(prev_set - curr_set) # number of ports closed
     return curr_set, opened, closed
 
+class CustomFileSystemEventHandler(FileSystemEventHandler):
+    def __init__(self):
+        self.created = 0
+        self.deleted = 0
+        self.modified = 0
+        self.moved = 0
+    
+    def on_created(self, event):
+        logger.debug("Created: " + event.src_path)
+        self.created += 1
+    
+    def on_deleted(self, event):
+        logger.debug("Deleted: " + event.src_path)
+        self.deleted += 1
+    
+    def on_modified(self, event): # Excluded from features
+        logger.debug("Modified: " + event.src_path)
+        self.modified += 1
+    
+    def on_moved(self, event):
+        logger.debug("Moved: " + event.src_path)
+        self.moved += 1
+    
+    def clear(self):
+        self.__init__()
+
 args = parse_args()
 
 # Create output file
-filename = "-".join(str(x) for x in localtime())
+filename = "-".join(str(x) for x in localtime()) + ".log"
 fout = open(os.path.join(args.output_dir, filename), 'a')
 
 # Initialize
 pc_set = set() # set of processes
 nt_set = set() # set of network connections
 
+handler = CustomFileSystemEventHandler()
+observer = Observer()
+observer.schedule(handler, args.monitor_dir, recursive=True)
+observer.start()
+
 # Warm Start
 pc_set, pc_created, pc_deleted = collect_process(pc_set)
 nt_set, nt_opened, nt_closed = collect_network(nt_set)
+handler.clear() # clear statistics
 sleep(args.interval * 60)
 
 # Collect
@@ -66,17 +105,22 @@ try:
     while True:
         pc_set, pc_created, pc_deleted = collect_process(pc_set)
         nt_set, nt_opened, nt_closed = collect_network(nt_set)
-        # fout.write("hi!")
         if args.verbose:
             print("----------------------------------------")
-            print(localtime())
+            print(asctime(localtime()))
             print("Number of processes created: {}".format(pc_created))
             print("Number of processes deleted: {}".format(pc_deleted))
             print("Number of ports opened: {}".format(nt_opened))
             print("Number of ports closed: {}".format(nt_closed))
+            print("Number of files created: {}".format(handler.created))
+            print("Number of files deleted: {}".format(handler.deleted))
+            print("Number of files modified: {}".format(handler.modified))
+            print("Number of files moved: {}".format(handler.moved))
             print("----------------------------------------")
+        handler.clear() # clear statistics
         sleep(args.interval * 60)
 except KeyboardInterrupt:
-    pass
+    observer.stop()
 
+observer.join()
 fout.close()
