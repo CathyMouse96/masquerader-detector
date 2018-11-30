@@ -11,7 +11,7 @@ import psutil
 from watchdog.observers import Observer
 from AppKit import NSWorkspace
 
-from fs_eventhandler import CustomFileSystemEventHandler
+from eventhandler import CustomFileSystemEventHandler
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
