@@ -1,6 +1,6 @@
 """ Collects user behavior data at a fixed interval. """
 
-# Created by CMouse (qt2126@columbia.edu)
+""" ---- Created by CMouse (qt2126@columbia.edu) ---- """
 
 import argparse
 import logging
@@ -8,13 +8,16 @@ import os
 from time import asctime, localtime, sleep
 
 import psutil
-from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
+from AppKit import NSWorkspace
+
+from fs_eventhandler import CustomFileSystemEventHandler
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
 def parse_args():
+    """ Parse command line arguments. """
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--interval', default=5, type=int, 
         help='The interval (minutes) between two consecutive collections.')
@@ -53,77 +56,72 @@ def collect_network(prev_set):
     closed = len(prev_set - curr_set) # number of ports closed
     return curr_set, opened, closed
 
-class CustomFileSystemEventHandler(FileSystemEventHandler):
-    def __init__(self):
-        self.created = 0
-        self.deleted = 0
-        self.modified = 0
-        self.moved = 0
+def main():
+    args = parse_args()
+
+    # Create output file
+    filename = "-".join(str(x) for x in localtime()) + ".log"
+    fout = open(os.path.join(args.output_dir, filename), 'a')
     
-    def on_created(self, event):
-        logger.debug("Created: " + event.src_path)
-        self.created += 1
+    # Initialize
+    pc_set = set() # set of processes
+    nt_set = set() # set of network connections
     
-    def on_deleted(self, event):
-        logger.debug("Deleted: " + event.src_path)
-        self.deleted += 1
+    handler = CustomFileSystemEventHandler()
+    observer = Observer()
+    observer.schedule(handler, args.monitor_dir, recursive=True)
+    observer.start()
     
-    def on_modified(self, event): # Excluded from features
-        logger.debug("Modified: " + event.src_path)
-        self.modified += 1
+    workspace = NSWorkspace.sharedWorkspace()
     
-    def on_moved(self, event):
-        logger.debug("Moved: " + event.src_path)
-        self.moved += 1
+    # Warm Start
+    pc_set, pc_created, pc_deleted = collect_process(pc_set)
+    nt_set, nt_opened, nt_closed = collect_network(nt_set)
+    prev_app = workspace.activeApplication()["NSApplicationName"]
+    sleep(1)
+
+    handler.clear() # clear statistics
+    app_switched = 0  # clear statistics
     
-    def clear(self):
-        self.__init__()
+    # Collect
+    try:
+        while True:
+            for _ in range(args.interval * 60):
+                curr_app = workspace.activeApplication()["NSApplicationName"]
+                if curr_app != prev_app:
+                    logger.debug("App switch from {} to {}".format(prev_app, curr_app))
+                    app_switched += 1
+                prev_app = curr_app
+                sleep(1)
+            
+            pc_set, pc_created, pc_deleted = collect_process(pc_set)
+            nt_set, nt_opened, nt_closed = collect_network(nt_set)
 
-args = parse_args()
+            result = (pc_created, pc_deleted, nt_opened, nt_closed, handler.created, handler.deleted, handler.moved, app_switched)
+            fout.write(str(result) + '\n')
+            if args.verbose:
+                verbose_print(results)
+            
+            handler.clear() # clear statistics
+            app_switched = 0  # clear statistics
+    except KeyboardInterrupt:
+        observer.stop()
+    
+    observer.join()
+    fout.close()
 
-# Create output file
-filename = "-".join(str(x) for x in localtime()) + ".log"
-fout = open(os.path.join(args.output_dir, filename), 'a')
+def verbose_print(results):
+    print("----------------------------------------")
+    print(asctime(localtime()))
+    print("Number of processes created: {}".format(results[0]))
+    print("Number of processes deleted: {}".format(results[1]))
+    print("Number of ports opened: {}".format(results[2]))
+    print("Number of ports closed: {}".format(results[3]))
+    print("Number of files created: {}".format(results[4]))
+    print("Number of files deleted: {}".format(results[5]))
+    print("Number of files moved: {}".format(results[6]))
+    print("Number of apps switched: {}".format(results[7]))
+    print("----------------------------------------")
 
-# Initialize
-pc_set = set() # set of processes
-nt_set = set() # set of network connections
-
-handler = CustomFileSystemEventHandler()
-observer = Observer()
-observer.schedule(handler, args.monitor_dir, recursive=True)
-observer.start()
-
-# Warm Start
-pc_set, pc_created, pc_deleted = collect_process(pc_set)
-nt_set, nt_opened, nt_closed = collect_network(nt_set)
-handler.clear() # clear statistics
-sleep(args.interval * 60)
-
-# Collect
-try:
-    while True:
-        pc_set, pc_created, pc_deleted = collect_process(pc_set)
-        nt_set, nt_opened, nt_closed = collect_network(nt_set)
-        fout.write(str(
-            (pc_created, pc_deleted, nt_opened, nt_closed, handler.created, handler.deleted, handler.moved)
-            ) + '\n')
-        if args.verbose:
-            print("----------------------------------------")
-            print(asctime(localtime()))
-            print("Number of processes created: {}".format(pc_created))
-            print("Number of processes deleted: {}".format(pc_deleted))
-            print("Number of ports opened: {}".format(nt_opened))
-            print("Number of ports closed: {}".format(nt_closed))
-            print("Number of files created: {}".format(handler.created))
-            print("Number of files deleted: {}".format(handler.deleted))
-            print("Number of files modified: {}".format(handler.modified))
-            print("Number of files moved: {}".format(handler.moved))
-            print("----------------------------------------")
-        handler.clear() # clear statistics
-        sleep(args.interval * 60)
-except KeyboardInterrupt:
-    observer.stop()
-
-observer.join()
-fout.close()
+if __name__ == "__main__":
+    main()
