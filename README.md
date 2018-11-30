@@ -36,3 +36,7 @@ Train model:
 ```sh
 $ python3 train.py
 ```
+
+## Troubleshooting
+1. `ModuleNotFoundError: No module named 'AppKit'`
+Solution: Run `pip3 install -U PyObjC` and rename `appkit` to `AppKit` in wherever your AppKit is installed (e.g. `/Library/Frameworks/Python.framework/Versions/<version>/lib/python<version>/site-packages`).
