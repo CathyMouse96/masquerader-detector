@@ -97,8 +97,9 @@ def main():
             pc_set, pc_created, pc_deleted = collect_process(pc_set)
             nt_set, nt_opened, nt_closed = collect_network(nt_set)
 
-            result = (pc_created, pc_deleted, nt_opened, nt_closed, handler.created, handler.deleted, handler.moved, app_switched)
-            fout.write(str(result) + '\n')
+            results = (pc_created, pc_deleted, nt_opened, nt_closed, handler.created, handler.deleted, handler.modified, handler.moved, app_switched)
+            fout.write(str(results) + '\n')
+            fout.flush()
             if args.verbose:
                 verbose_print(results)
             
@@ -119,8 +120,9 @@ def verbose_print(results):
     print("Number of ports closed: {}".format(results[3]))
     print("Number of files created: {}".format(results[4]))
     print("Number of files deleted: {}".format(results[5]))
-    print("Number of files moved: {}".format(results[6]))
-    print("Number of apps switched: {}".format(results[7]))
+    print("Number of files modified: {}".format(results[6]))
+    print("Number of files moved: {}".format(results[7]))
+    print("Number of apps switched: {}".format(results[8]))
     print("----------------------------------------")
 
 if __name__ == "__main__":
