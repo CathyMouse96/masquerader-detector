@@ -38,7 +38,11 @@ def main():
     best_n = 1
     best_score = 0
 
-    for n in range(1, 50):
+    training_scores = []
+    valid_scores = []
+    nrange = range(1, 50)
+
+    for n in nrange:
         
         # Split into training and valid
         np.random.shuffle(data)
@@ -51,14 +55,24 @@ def main():
         gmm.fit(data_t)
 
         # Evaluate GMM
-        score = gmm.score(data_v)
-        
-        if score > best_score:
-            best_n = n
-            best_score = score
-    
-    logging.info("Number of components in GMM is {}".format(best_n))
+        score_t = gmm.score(data_t)
+        score_v = gmm.score(data_v)
 
+        training_scores.append(score_t)
+        valid_scores.append(score_v)
+        
+        if score_v > best_score:
+            best_n = n
+            best_score = score_v
+    
+    logging.info("Optimal number of components in GMM is {}".format(best_n))
+
+    plt.plot(nrange, training_scores)
+    plt.plot(nrange, valid_scores)
+    plt.title("Hyperparameter tuning (n_components)")
+    plt.gca().legend(["Training", "Validation"])
+    plt.show()
+    
     # Split into training and valid
     np.random.shuffle(data)
     data_t, data_v = data[:train_len], data[train_len + 1:]
@@ -67,14 +81,7 @@ def main():
     gmm = GaussianMixture(n_components=best_n)
 
     # Train GMM
-    gmm.fit(data_t)
-
-    # Evaluate GMM
-    valid_scores = gmm.score_samples(data_v)
-    print(valid_scores)
-    plt.plot(valid_scores)
-    plt.title("Scores for validation data")
-    plt.show()
+    gmm.fit(data)
 
     # Save GMM
     with open(os.path.join(args.model_dir, 'gmm.pkl'), 'wb') as f:
